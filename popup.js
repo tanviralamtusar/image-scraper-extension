@@ -1,13 +1,15 @@
 const scrapeBtn = document.getElementById("scrapeBtn");
 const statusEl = document.getElementById("status");
 const gridEl = document.getElementById("grid");
+const filterRow = document.getElementById("filterRow");
+const qualityFilter = document.getElementById("qualityFilter");
 const selectRow = document.getElementById("selectRow");
 const downloadRow = document.getElementById("downloadRow");
 const downloadBtn = document.getElementById("downloadBtn");
 const selectAllBtn = document.getElementById("selectAllBtn");
 const selectNoneBtn = document.getElementById("selectNoneBtn");
 
-let imageUrls = [];
+let images = []; // { url, width, height }
 let selected = new Set();
 let currentTab = null;
 
@@ -32,6 +34,19 @@ function filenameForUrl(url, index) {
   }
 }
 
+function qualityLabel(width, height) {
+  const minSide = Math.min(width, height);
+  if (minSide === 0) return { text: "?", cls: "low" };
+  if (minSide >= 800) return { text: `${width}×${height}`, cls: "high" };
+  if (minSide >= 300) return { text: `${width}×${height}`, cls: "medium" };
+  return { text: `${width}×${height}`, cls: "low" };
+}
+
+function passesFilter(img) {
+  const minSide = Math.min(img.width, img.height);
+  return minSide >= Number(qualityFilter.value);
+}
+
 function updateDownloadButton() {
   downloadBtn.textContent = `Download Selected (${selected.size})`;
   downloadBtn.disabled = selected.size === 0;
@@ -39,21 +54,29 @@ function updateDownloadButton() {
 
 function renderGrid() {
   gridEl.innerHTML = "";
-  imageUrls.forEach((url, i) => {
+  images.forEach((img, i) => {
+    if (!passesFilter(img)) return;
+
     const thumb = document.createElement("div");
-    thumb.className = "thumb selected";
+    thumb.className = "thumb" + (selected.has(i) ? " selected" : "");
     thumb.dataset.index = String(i);
 
-    const img = document.createElement("img");
-    img.src = url;
-    img.loading = "lazy";
+    const imgEl = document.createElement("img");
+    imgEl.src = img.url;
+    imgEl.loading = "lazy";
 
     const check = document.createElement("div");
     check.className = "check";
     check.textContent = "✓";
 
-    thumb.appendChild(img);
+    const quality = qualityLabel(img.width, img.height);
+    const qualityEl = document.createElement("div");
+    qualityEl.className = `quality ${quality.cls}`;
+    qualityEl.textContent = quality.text;
+
+    thumb.appendChild(imgEl);
     thumb.appendChild(check);
+    thumb.appendChild(qualityEl);
 
     thumb.addEventListener("click", () => {
       if (selected.has(i)) {
@@ -68,12 +91,14 @@ function renderGrid() {
 
     gridEl.appendChild(thumb);
   });
+  updateDownloadButton();
 }
 
 scrapeBtn.addEventListener("click", async () => {
   scrapeBtn.disabled = true;
   statusEl.textContent = "Scraping...";
   gridEl.innerHTML = "";
+  filterRow.style.display = "none";
   selectRow.style.display = "none";
   downloadRow.style.display = "none";
 
@@ -82,24 +107,27 @@ scrapeBtn.addEventListener("click", async () => {
     if (!tab?.id) throw new Error("No active tab");
     currentTab = tab;
 
-    const [{ result: urls }] = await chrome.scripting.executeScript({
+    statusEl.textContent = "Scraping and measuring image quality...";
+
+    const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ["content.js"],
     });
 
-    imageUrls = urls || [];
+    images = result || [];
 
-    if (imageUrls.length === 0) {
+    if (images.length === 0) {
       statusEl.textContent = "No images found.";
       return;
     }
 
-    selected = new Set(imageUrls.map((_, i) => i));
+    selected = new Set(images.map((_, i) => i));
+    qualityFilter.value = "0";
     renderGrid();
+    filterRow.style.display = "flex";
     selectRow.style.display = "flex";
     downloadRow.style.display = "flex";
-    updateDownloadButton();
-    statusEl.textContent = `Found ${imageUrls.length} images. Select which to download.`;
+    statusEl.textContent = `Found ${images.length} images. Select which to download.`;
   } catch (err) {
     console.error(err);
     statusEl.textContent = `Error: ${err.message}`;
@@ -108,16 +136,25 @@ scrapeBtn.addEventListener("click", async () => {
   }
 });
 
+qualityFilter.addEventListener("change", () => {
+  const visibleIndices = images
+    .map((img, i) => (passesFilter(img) ? i : -1))
+    .filter((i) => i !== -1);
+  selected = new Set(visibleIndices);
+  renderGrid();
+});
+
 selectAllBtn.addEventListener("click", () => {
-  selected = new Set(imageUrls.map((_, i) => i));
-  document.querySelectorAll(".thumb").forEach((el) => el.classList.add("selected"));
-  updateDownloadButton();
+  const visibleIndices = images
+    .map((img, i) => (passesFilter(img) ? i : -1))
+    .filter((i) => i !== -1);
+  selected = new Set(visibleIndices);
+  renderGrid();
 });
 
 selectNoneBtn.addEventListener("click", () => {
   selected = new Set();
-  document.querySelectorAll(".thumb").forEach((el) => el.classList.remove("selected"));
-  updateDownloadButton();
+  renderGrid();
 });
 
 downloadBtn.addEventListener("click", async () => {
@@ -133,7 +170,7 @@ downloadBtn.addEventListener("click", async () => {
   let downloaded = 0;
   for (let i = 0; i < indices.length; i++) {
     const idx = indices[i];
-    const url = imageUrls[idx];
+    const url = images[idx].url;
     const filename = `image-scraper/${host}/${filenameForUrl(url, idx + 1)}`;
     try {
       await chrome.downloads.download({ url, filename, conflictAction: "uniquify" });

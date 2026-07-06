@@ -39,4 +39,32 @@ function collectImageUrls() {
   );
 }
 
-collectImageUrls();
+function measure(url, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    let done = false;
+    const finish = (width, height) => {
+      if (done) return;
+      done = true;
+      resolve({ url, width, height });
+    };
+    const timer = setTimeout(() => finish(0, 0), timeoutMs);
+    img.onload = () => {
+      clearTimeout(timer);
+      finish(img.naturalWidth, img.naturalHeight);
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      finish(0, 0);
+    };
+    img.src = url;
+  });
+}
+
+async function collectImagesWithQuality() {
+  const urls = collectImageUrls();
+  const results = await Promise.all(urls.map((url) => measure(url)));
+  return results;
+}
+
+collectImagesWithQuality();

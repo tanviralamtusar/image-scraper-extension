@@ -91,6 +91,27 @@
       color: white;
       border-color: #2563eb;
     }
+    .thumb .quality {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      font-size: 9px;
+      line-height: 14px;
+      text-align: center;
+      color: white;
+      background: rgba(0, 0, 0, 0.55);
+    }
+    .thumb .quality.high { background: rgba(22, 163, 74, 0.75); }
+    .thumb .quality.medium { background: rgba(202, 138, 4, 0.75); }
+    .thumb .quality.low { background: rgba(220, 38, 38, 0.75); }
+    select {
+      flex: 1;
+      padding: 6px;
+      font-size: 12px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+    }
   </style>
 </head>
 <body>
@@ -99,6 +120,14 @@
     <button id="scrapeBtn">Scrape Images</button>
   </div>
   <div id="status"></div>
+  <div class="row" id="filterRow" style="display: none">
+    <label for="qualityFilter" style="font-size: 12px; align-self: center">Min quality:</label>
+    <select id="qualityFilter">
+      <option value="0">All</option>
+      <option value="300">Medium (≥300px)</option>
+      <option value="800">High (≥800px)</option>
+    </select>
+  </div>
   <div class="row" id="selectRow" style="display: none">
     <button class="secondary" id="selectAllBtn">Select All</button>
     <button class="secondary" id="selectNoneBtn">Select None</button>
